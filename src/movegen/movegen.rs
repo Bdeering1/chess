@@ -88,6 +88,7 @@ pub struct MoveGen {
     promotion_index: usize,
     iterator_mask: BitBoard,
     index: usize,
+    pv: Option<ChessMove>,
 }
 
 impl MoveGen {
@@ -126,6 +127,18 @@ impl MoveGen {
             promotion_index: 0,
             iterator_mask: !EMPTY,
             index: 0,
+            pv: None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn new_sorted(board: &Board, pv: ChessMove) -> MoveGen {
+        MoveGen {
+            moves: MoveGen::enumerate_moves(board),
+            promotion_index: 0,
+            iterator_mask: !EMPTY,
+            index: 0,
+            pv: Some(pv),
         }
     }
 
@@ -304,6 +317,10 @@ impl Iterator for MoveGen {
         {
             // are we done?
             None
+        } else if self.index == 0 && self.pv.is_some() {
+            // if we have a pv, then we should return that first
+            self.remove_move(self.pv.unwrap());
+            self.pv.take()
         } else if self.moves[self.index].promotion {
             let moves = &mut self.moves[self.index];
 
