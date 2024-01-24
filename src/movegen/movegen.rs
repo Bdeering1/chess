@@ -137,7 +137,7 @@ impl MoveGen {
 
     // create a new `MoveGen` structure sorted using a given PV and MVV/LVA
     #[inline(always)]
-    pub fn new_sorted(board: &Board, pv: Option<ChessMove>) -> MoveGen {
+    pub fn new_sorted(board: &Board, pv: Option<ChessMove>, only_captures: bool) -> MoveGen {
         let mut mg =
             MoveGen {
                 moves: MoveGen::enumerate_moves(board),
@@ -148,9 +148,13 @@ impl MoveGen {
                 index: 0,
                 pv,
             };
-        let their_pieces = board.color_combined(!board.side_to_move());
-        mg.set_iterator_mask(*their_pieces);
 
+        let their_pieces = board.color_combined(!board.side_to_move());
+        if only_captures {
+            mg.remove_mask(!*their_pieces);
+        }
+
+        mg.set_iterator_mask(*their_pieces);
         mg.capture_masks[Piece::Pawn as usize] = board.pieces(Piece::Pawn) & their_pieces;
         mg.capture_masks[Piece::Knight as usize] = board.pieces(Piece::Knight) & their_pieces;
         mg.capture_masks[Piece::Bishop as usize] = board.pieces(Piece::Bishop) & their_pieces;
@@ -341,7 +345,7 @@ impl ExactSizeIterator for MoveGen {
     fn len(&self) -> usize {
         let mut result = 0;
         for i in 0..self.moves.len() {
-            if self.moves[i].bitboard & self.iterator_mask == EMPTY {
+            if self.mvv_mask_type.is_none() && self.moves[i].bitboard & self.iterator_mask == EMPTY {
                 break;
             }
             if self.moves[i].promotion {
@@ -351,6 +355,7 @@ impl ExactSizeIterator for MoveGen {
                 result += (self.moves[i].bitboard & self.iterator_mask).popcnt() as usize;
             }
         }
+
         result
     }
 }
@@ -646,7 +651,7 @@ fn test_masked_move_gen() {
 #[test]
 fn test_sorted_move_gen() {
     let board = Board::from_str("k7/8/8/8/4bn2/1qrPP2p/PP4P1/K7 w - - 0 1").unwrap();
-    let mut moves = MoveGen::new_sorted(&board, Some(ChessMove::new(Square::A2, Square::A4, None)));
+    let mut moves = MoveGen::new_sorted(&board, Some(ChessMove::new(Square::A2, Square::A4, None)), false);
 
     assert_eq!(moves.next(), Some(move_of("a2a4")));
     assert_eq!(moves.next(), Some(move_of("a2b3")));
@@ -655,4 +660,18 @@ fn test_sorted_move_gen() {
     assert_eq!(moves.next(), Some(move_of("e3f4")));
     assert_eq!(moves.next(), Some(move_of("g2h3")));
     assert_ne!(moves.next(), None);
+}
+
+#[test]
+fn test_sorted_only_captures() {
+    let board = Board::from_str("k7/8/8/8/4bn2/1qrPP2p/PP4P1/K7 w - - 0 1").unwrap();
+    let mut moves = MoveGen::new_sorted(&board, Some(ChessMove::new(Square::A2, Square::A4, None)), true);
+
+    assert_eq!(moves.next(), Some(move_of("a2a4")));
+    assert_eq!(moves.next(), Some(move_of("a2b3")));
+    assert_eq!(moves.next(), Some(move_of("b2c3")));
+    assert_eq!(moves.next(), Some(move_of("d3e4")));
+    assert_eq!(moves.next(), Some(move_of("e3f4")));
+    assert_eq!(moves.next(), Some(move_of("g2h3")));
+    assert_eq!(moves.next(), None);
 }
