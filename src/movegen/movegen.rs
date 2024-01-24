@@ -83,17 +83,17 @@ pub type MoveList = NoDrop<ArrayVec<SquareAndBitBoard, 18>>;
 /// assert_eq!(count, 20);
 ///
 /// ```
-pub struct MoveGen<'a> {
+pub struct MoveGen {
     moves: MoveList,
-    board: &'a Board,
-    promotion_index: usize,
+    capture_masks: [BitBoard; 5],
     iterator_mask: BitBoard,
     mvv_mask_type: Option<Piece>,
-    pv: Option<ChessMove>,
+    promotion_index: usize,
     index: usize,
+    pv: Option<ChessMove>,
 }
 
-impl<'a> MoveGen<'a> {
+impl MoveGen {
     #[inline(always)]
     fn enumerate_moves(board: &Board) -> MoveList {
         let checkers = *board.checkers();
@@ -126,12 +126,12 @@ impl<'a> MoveGen<'a> {
     pub fn new_legal(board: &Board) -> MoveGen {
         MoveGen {
             moves: MoveGen::enumerate_moves(board),
-            board,
-            promotion_index: 0,
+            capture_masks: [EMPTY; 5],
             iterator_mask: !EMPTY,
             mvv_mask_type: None,
-            pv: None,
+            promotion_index: 0,
             index: 0,
+            pv: None,
         }
     }
 
@@ -141,16 +141,23 @@ impl<'a> MoveGen<'a> {
         let mut mg =
             MoveGen {
                 moves: MoveGen::enumerate_moves(board),
-                board,
-                promotion_index: 0,
+                capture_masks: [EMPTY; 5],
                 iterator_mask: !EMPTY,
                 mvv_mask_type: None,
-                pv,
+                promotion_index: 0,
                 index: 0,
+                pv,
             };
-        let targets = board.color_combined(!board.side_to_move());
-        mg.set_iterator_mask(*targets);
+        let their_pieces = board.color_combined(!board.side_to_move());
+        mg.set_iterator_mask(*their_pieces);
+
+        mg.capture_masks[Piece::Pawn as usize] = board.pieces(Piece::Pawn) & their_pieces;
+        mg.capture_masks[Piece::Knight as usize] = board.pieces(Piece::Knight) & their_pieces;
+        mg.capture_masks[Piece::Bishop as usize] = board.pieces(Piece::Bishop) & their_pieces;
+        mg.capture_masks[Piece::Rook as usize] = board.pieces(Piece::Rook) & their_pieces;
+        mg.capture_masks[Piece::Queen as usize] = board.pieces(Piece::Queen) & their_pieces;
         mg.filter_captures(Some(Piece::Queen));
+
         mg
     }
 
@@ -230,9 +237,7 @@ impl<'a> MoveGen<'a> {
     /// only iterate captures of a given piece type
     pub fn filter_captures(&mut self, target: Option<Piece>) {
         if target.is_some() {
-            let targets = self.board.pieces(target.unwrap())
-                & self.board.color_combined(!self.board.side_to_move());
-            self.set_iterator_mask(targets);
+            self.set_iterator_mask(self.capture_masks[target.unwrap() as usize]);
         } else {
             self.set_iterator_mask(!EMPTY);
         }
@@ -312,7 +317,7 @@ impl<'a> MoveGen<'a> {
         } else {
             iterable.set_iterator_mask(*targets);
             for x in &mut iterable {
-                let mut bresult = mem::MaybeUninit::<Board>::uninit();
+                let mut bresult = std::mem::MaybeUninit::<Board>::uninit();
                 unsafe {
                     board.make_move(x, &mut *bresult.as_mut_ptr());
                     result += MoveGen::movegen_perft_test(&*bresult.as_ptr(), depth - 1);
@@ -320,7 +325,7 @@ impl<'a> MoveGen<'a> {
             }
             iterable.set_iterator_mask(!EMPTY);
             for x in &mut iterable {
-                let mut bresult = mem::MaybeUninit::<Board>::uninit();
+                let mut bresult = std::mem::MaybeUninit::<Board>::uninit();
                 unsafe {
                     board.make_move(x, &mut *bresult.as_mut_ptr());
                     result += MoveGen::movegen_perft_test(&*bresult.as_ptr(), depth - 1);
@@ -331,7 +336,7 @@ impl<'a> MoveGen<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for MoveGen<'a> {
+impl ExactSizeIterator for MoveGen {
     /// Give the exact length of this iterator
     fn len(&self) -> usize {
         let mut result = 0;
@@ -350,7 +355,7 @@ impl<'a> ExactSizeIterator for MoveGen<'a> {
     }
 }
 
-impl<'a> Iterator for MoveGen<'a> {
+impl Iterator for MoveGen {
     type Item = ChessMove;
 
     /// Give a size_hint to some functions that need it
@@ -636,4 +641,18 @@ fn test_masked_move_gen() {
         capture_moves.collect::<HashSet<_>>(),
         expected.into_iter().collect()
     );
+}
+
+#[test]
+fn test_sorted_move_gen() {
+    let board = Board::from_str("k7/8/8/8/4bn2/1qrPP2p/PP4P1/K7 w - - 0 1").unwrap();
+    let mut moves = MoveGen::new_sorted(&board, Some(ChessMove::new(Square::A2, Square::A4, None)));
+
+    assert_eq!(moves.next(), Some(move_of("a2a4")));
+    assert_eq!(moves.next(), Some(move_of("a2b3")));
+    assert_eq!(moves.next(), Some(move_of("b2c3")));
+    assert_eq!(moves.next(), Some(move_of("d3e4")));
+    assert_eq!(moves.next(), Some(move_of("e3f4")));
+    assert_eq!(moves.next(), Some(move_of("g2h3")));
+    assert_ne!(moves.next(), None);
 }

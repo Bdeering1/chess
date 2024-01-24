@@ -76,7 +76,8 @@ impl Game {
     /// use chess::{Game, MoveGen, Color};
     ///
     /// let mut game = Game::new();
-    /// let mut movegen = MoveGen::new_legal(&game.current_position());
+    /// let position = &game.current_position();
+    /// let mut movegen = MoveGen::new_legal(position);
     ///
     /// game.make_move(movegen.next().expect("At least one valid move"));
     /// game.resign(Color::Black);
@@ -301,7 +302,8 @@ impl Game {
     ///
     /// let mut game = Game::new();
     ///
-    /// let mut movegen = MoveGen::new_legal(&game.current_position());
+    /// let position = &game.current_position();
+    /// let mut movegen = MoveGen::new_legal(position);
     ///
     /// game.make_move(movegen.next().expect("At least one legal move"));
     /// ```
@@ -374,7 +376,8 @@ impl Game {
     /// assert_eq!(game.accept_draw(), true);
     ///
     /// let mut game2 = Game::new();
-    /// let mut movegen = MoveGen::new_legal(&game2.current_position());
+    /// let position = &game2.current_position();
+    /// let mut movegen = MoveGen::new_legal(position);
     /// game2.offer_draw(Color::Black);
     /// game2.make_move(movegen.next().expect("At least one legal move"));
     /// assert_eq!(game2.accept_draw(), false);
