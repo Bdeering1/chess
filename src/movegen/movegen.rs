@@ -344,15 +344,26 @@ impl ExactSizeIterator for MoveGen {
     /// Give the exact length of this iterator
     fn len(&self) -> usize {
         let mut result = 0;
-        for i in 0..self.moves.len() {
-            if self.mvv_mask_type.is_none() && self.moves[i].bitboard & self.iterator_mask == EMPTY {
-                break;
+        if self.mvv_mask_type.is_none() {
+            for i in 0..self.moves.len() {
+                if self.moves[i].bitboard & self.iterator_mask == EMPTY {
+                    break;
+                }
+                if self.moves[i].promotion {
+                    result += ((self.moves[i].bitboard & self.iterator_mask).popcnt() as usize)
+                        * NUM_PROMOTION_PIECES;
+                } else {
+                    result += (self.moves[i].bitboard & self.iterator_mask).popcnt() as usize;
+                }
             }
+            return result
+        }
+
+        for i in 0..self.moves.len() {
             if self.moves[i].promotion {
-                result += ((self.moves[i].bitboard & self.iterator_mask).popcnt() as usize)
-                    * NUM_PROMOTION_PIECES;
+                result += self.moves[i].bitboard.popcnt() as usize * NUM_PROMOTION_PIECES;
             } else {
-                result += (self.moves[i].bitboard & self.iterator_mask).popcnt() as usize;
+                result += self.moves[i].bitboard.popcnt() as usize;
             }
         }
 
@@ -674,4 +685,12 @@ fn test_sorted_only_captures() {
     assert_eq!(moves.next(), Some(move_of("e3f4")));
     assert_eq!(moves.next(), Some(move_of("g2h3")));
     assert_eq!(moves.next(), None);
+}
+
+#[test]
+fn test_sorted_len() {
+    let board = Board::default();
+    let moves = MoveGen::new_sorted(&board, None, false);
+
+    assert_eq!(moves.len(), 20);
 }
